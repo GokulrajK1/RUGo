@@ -1,0 +1,13 @@
+cd /Users/gokulrajkumarassamy/Programming/Projects/RUGo/api/logger/cloud_artifacts
+rm -rf deploy
+mkdir -p deploy/passiogo
+cp ../bus_logger.py deploy/
+cp ../cloud_bus_logger.py deploy/lambda_function.py
+cp ../../passiogo/__init__.py deploy/passiogo/
+cp ../../passiogo/passiogo_client.py deploy/passiogo/
+cp ../../passiogo/rutgers_passiogo_client.py deploy/passiogo/
+python3 -m pip install -t deploy requests
+cd deploy
+zip -r ../bus-logger.zip .
+cd ../..
+echo "Created bus-logger.zip"

@@ -1,0 +1,6 @@
+{
+  "bucket": "ru-bus-logs-1",
+  "prefix": "bus_logs_spring26/",
+  "output_dir": "data/",
+  "region": "us-east-1"
+}
