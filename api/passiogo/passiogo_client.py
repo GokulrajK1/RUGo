@@ -425,27 +425,30 @@ class PassioGOClient:
             body (dict, optional): Request parameters or data.
         
         Returns:
-            dict: The JSON response from the API.
-        
-        Raises:
-            ValueError: If the response is invalid or contains an error.
+            dict or None: The JSON response from the API, or None on error.
         """
-        if request_type == HTTPRequestType.GET:
-            response = requests.get(url, params=body)
-        else:
-            response = requests.post(url, json=body)
-        
-        response.raise_for_status()
-
         try:
-            result = response.json()
+            if request_type == HTTPRequestType.GET:
+                response = requests.get(url, params=body)
+            else:
+                response = requests.post(url, json=body)
+            
+            response.raise_for_status()
+
+            try:
+                result = response.json()
+            except Exception as e:
+                print(f"Failed to parse JSON response: {e}")
+                return None
+            
+            if 'error' in result and result['error']:
+                print(f"API Error: {result['error']}")
+                return None
+            
+            return result
         except Exception as e:
-            raise ValueError("Failed to parse JSON response") from e
-        
-        if 'error' in result and result['error']:
-            raise ValueError(f"API Error: {response}")
-        
-        return result 
+            print(f"API request failed: {e}")
+            return None 
     
     def get_routes(self, as_dict : bool = True) -> dict[str, Route] | list[Route]:
         """
@@ -462,26 +465,34 @@ class PassioGOClient:
             body = {"systemSelected0": str(self.system_id), "amount": 1}
             response = self._send_api_request(url, HTTPRequestType.POST, body)
             
+            if response is None:
+                print("Failed to get routes: No response")
+                return {} if as_dict else []
+            
             if not isinstance(response, list):
-                raise ValueError(f"Expected list of routes, got {type(response)}")
+                print(f"Expected list of routes, got {type(response)}")
+                return {} if as_dict else []
             
             routes_dict = {}
             routes_list = []
 
             for route_data in response:
                 if not isinstance(route_data, dict):
-                    raise ValueError(f"Expected dict for route data, got {type(route_data)}")
+                    print(f"Expected dict for route data, got {type(route_data)}")
+                    continue
                 try:
                     route = Route(**route_data)
                     routes_dict[route.myid] = route
                     routes_list.append(route)
                 except TypeError as e:
-                    raise ValueError(f"Invalid route data: {route_data}") from e
+                    print(f"Invalid route data: {route_data}, error: {e}")
+                    continue
             
             return routes_dict if as_dict else routes_list
         
         except Exception as e:
-            raise ValueError(f"Failed to get routes: {str(e)}") from e
+            print(f"Failed to get routes: {str(e)}")
+            return {} if as_dict else []
         
     def get_stops(self) -> GetStopsResponse:
         """
@@ -495,24 +506,32 @@ class PassioGOClient:
             body = {"s0": str(self.system_id), "sA": 1}
             response = self._send_api_request(url, HTTPRequestType.POST, body)
             
+            if response is None:
+                print("Failed to get stops: No response")
+                return GetStopsResponse(stops_list=[], stops_dict={}, routes={}, route_points={})
+            
             if not isinstance(response, dict):
-                raise ValueError(f"Expected dict response, got {type(response)}")
+                print(f"Expected dict response, got {type(response)}")
+                return GetStopsResponse(stops_list=[], stops_dict={}, routes={}, route_points={})
             
             stops_data = response.get('stops', {})
             if not isinstance(stops_data, dict):
-                raise ValueError(f"Expected dict for stops data, got {type(stops_data)}")
+                print(f"Expected dict for stops data, got {type(stops_data)}")
+                stops_data = {}
             
             stops_list = []
             stops_dict = {}
             for stop_key, stop_data in stops_data.items():
                 if not isinstance(stop_data, dict):
-                    raise ValueError(f"Expected dict for stop data, got {type(stop_data)}")
+                    print(f"Expected dict for stop data, got {type(stop_data)}")
+                    continue
                 try:
                     stop = Stop(**stop_data)
                     stops_dict[stop_key[2:]] = stop
                     stops_list.append(stop)
                 except TypeError as e:
-                    raise ValueError(f"Invalid stop data: {stop_data}") from e
+                    print(f"Invalid stop data: {stop_data}, error: {e}")
+                    continue
            
             center_data = response.get('center', {})
             center = Center(**center_data) if center_data else None
@@ -541,7 +560,8 @@ class PassioGOClient:
             )
         
         except Exception as e:
-            raise ValueError(f"Failed to get stops: {str(e)}") from e
+            print(f"Failed to get stops: {str(e)}")
+            return GetStopsResponse(stops_list=[], stops_dict={}, routes={}, route_points={})
         
     def get_buses(self) -> list[Bus]:
         """
@@ -555,29 +575,39 @@ class PassioGOClient:
             body = {"s0": str(self.system_id), "sA": 1}
             response = self._send_api_request(url, HTTPRequestType.POST, body)
             
+            if response is None:
+                print("Failed to get buses: No response")
+                return []
+            
             if not isinstance(response, dict) or 'buses' not in response:
-                raise ValueError(f"Expected dict with 'buses' key, got {type(response)}")
+                print(f"Expected dict with 'buses' key, got {type(response)}")
+                return []
             
             buses_data = response['buses']
             if not isinstance(buses_data, dict):
-                raise ValueError(f"Expected dict for buses data, got {type(buses_data)}")
+                print(f"Expected dict for buses data, got {type(buses_data)}")
+                return []
             
             buses = []
             for device_id, bus_list in buses_data.items():
                 if not isinstance(bus_list, list):
-                    raise ValueError(f"Expected list for bus data, got {type(bus_list)}")
+                    print(f"Expected list for bus data, got {type(bus_list)}")
+                    continue
                 for bus_data in bus_list:
                     if not isinstance(bus_data, dict):
-                        raise ValueError(f"Expected dict for bus data, got {type(bus_data)}")
+                        print(f"Expected dict for bus data, got {type(bus_data)}")
+                        continue
                     try:
                         bus = Bus(**bus_data)
                         buses.append(bus)
                     except TypeError as e:
-                        raise ValueError(f"Invalid bus data: {bus_data}") from e
+                        print(f"Invalid bus data: {bus_data}, error: {e}")
+                        continue
             
             return buses
         except Exception as e:
-            raise ValueError(f"Failed to get buses: {str(e)}") from e
+            print(f"Failed to get buses: {str(e)}")
+            return []
         
     def get_eta(self, stop_ids : list[str], route_id : str, position : int, as_dict : bool = True) -> dict[str, list[ETA]] | list[ETA]:
         """
@@ -602,22 +632,30 @@ class PassioGOClient:
             }
             response = self._send_api_request(url, HTTPRequestType.GET, body)
             
+            if response is None:
+                print("Failed to get ETAs: No response")
+                return {} if as_dict else []
+            
             if not isinstance(response, dict) or 'ETAs' not in response:
-                raise ValueError(f"Expected dict with 'ETAs' key, got {type(response)}")
+                print(f"Expected dict with 'ETAs' key, got {type(response)}")
+                return {} if as_dict else []
             
             etas_data = response['ETAs']
             if not isinstance(etas_data, dict):
-                raise ValueError(f"Expected dict for ETAs data, got {type(etas_data)}")
+                print(f"Expected dict for ETAs data, got {type(etas_data)}")
+                return {} if as_dict else []
             
             etas_dict = {}
             etas_list = []
             for stop_key, eta_list in etas_data.items():
                 if not isinstance(eta_list, list):
-                    raise ValueError(f"Expected list for ETA data, got {type(eta_list)}")
+                    print(f"Expected list for ETA data, got {type(eta_list)}")
+                    continue
                 parsed_etas = []
                 for eta_data in eta_list:
                     if not isinstance(eta_data, dict):
-                        raise ValueError(f"Expected dict for ETA data, got {type(eta_data)}")
+                        print(f"Expected dict for ETA data, got {type(eta_data)}")
+                        continue
              
                     solid_eta_data = eta_data.get('solidEta')
                     solid_eta = SolidEta(**solid_eta_data) if solid_eta_data else None
@@ -626,13 +664,15 @@ class PassioGOClient:
                         eta = ETA(**eta_data)
                         parsed_etas.append(eta)
                     except TypeError as e:
-                        raise ValueError(f"Invalid ETA data: {eta_data}") from e
+                        print(f"Invalid ETA data: {eta_data}, error: {e}")
+                        continue
                 etas_dict[stop_key] = parsed_etas
                 etas_list.extend(parsed_etas)
 
             return etas_dict if as_dict else etas_list
         except Exception as e:
-            raise ValueError(f"Failed to get ETAs: {str(e)}") from e
+            print(f"Failed to get ETAs: {str(e)}")
+            return {} if as_dict else []
         
 if __name__ == "__main__":
     # Example usage of the PassioGOClient

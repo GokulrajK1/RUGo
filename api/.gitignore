@@ -1,1 +1,4 @@
 venv
+logger/__pycache__/
+logger/cloud_artifacts/
+logger/data/

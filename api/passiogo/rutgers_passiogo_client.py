@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from .passiogo_client import PassioGOClient
 
 """
@@ -228,6 +229,7 @@ class RutgersBus:
         speed_in_mph : float = None,
         position_coord : Coordinate = None,
         eta : RutgersETA = None,
+        timestamp : datetime = None
     ):
         """
         Initialize a RutgersBus.
@@ -245,6 +247,7 @@ class RutgersBus:
             speed_in_mph (float): Speed in mph.
             position_coord (Coordinate): Current position.
             eta (RutgersETA): ETA information.
+            timestamp (datetime): Timestamp of the bus data.
         """
         self.id = id
         self.route_id = route_id
@@ -257,10 +260,11 @@ class RutgersBus:
         self.heading_in_degrees = heading_in_degrees
         self.speed_in_mph = speed_in_mph
         self.position_coord = position_coord
-        self.eta = eta 
+        self.eta = eta
+        self.timestamp = timestamp 
 
     def __repr__(self):
-        return f"RutgersBus(id={self.id}, route_id={self.route_id}, name={self.name}, pax_load={self.pax_load}, total_capacity={self.total_capacity}, is_out_of_service={self.is_out_of_service}, is_outdated={self.is_outdated}, heading_in_degrees={self.heading_in_degrees}, speed_in_mph={self.speed_in_mph}, position_coord={self.position_coord},\n\teta={self.eta})"
+        return f"RutgersBus(id={self.id}, route_id={self.route_id}, name={self.name}, pax_load={self.pax_load}, total_capacity={self.total_capacity}, is_out_of_service={self.is_out_of_service}, is_outdated={self.is_outdated}, heading_in_degrees={self.heading_in_degrees}, speed_in_mph={self.speed_in_mph}, position_coord={self.position_coord},\n\teta={self.eta}, timestamp={self.timestamp})"
 
     def to_dict(self):
         """
@@ -281,7 +285,8 @@ class RutgersBus:
             'heading_in_degrees': self.heading_in_degrees,
             'speed_in_mph': self.speed_in_mph,
             'position_coord': self.position_coord.to_dict() if self.position_coord else None,
-            'eta': self.eta.to_dict() if self.eta else None
+            'eta': self.eta.to_dict() if self.eta else None,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
 
 
@@ -313,56 +318,62 @@ class RutgersPassioGOClient():
         Returns:
             dict[str, RutgersRoute] or list[RutgersRoute]: Routes data.
         """
-        routes_dict = self.passiogo_client.get_routes()
-        stops_response = self.passiogo_client.get_stops()
-        stops_dict = stops_response.stops_dict
-        route_points = stops_response.route_points
-        stops_per_route = stops_response.routes
-        rutgers_routes_dict = {}
-        rutgers_routes_list = []
+        try:
+            routes_dict = self.passiogo_client.get_routes()
+            stops_response = self.passiogo_client.get_stops()
+            stops_dict = stops_response.stops_dict
+            route_points = stops_response.route_points
+            stops_per_route = stops_response.routes
+            rutgers_routes_dict = {}
+            rutgers_routes_list = []
 
-        for route_id, route in routes_dict.items():
+            for route_id, route in routes_dict.items():
 
-            if route_id in self.excluded_route_ids:
-                continue
+                if route_id in self.excluded_route_ids:
+                    continue
 
-            rutgers_route = RutgersRoute(
-                id = route_id,
-                name = route.name,
-                short_name = route.shortName,
-                color = route.color
-            )
-
-            rutgers_route.stops_list = []
-            rutgers_route.stops_dict = {}
-
-            if not stops_per_route and route_id not in stops_per_route:
-                raise ValueError(f"No stops found for route ID: {route_id}")
-            
-            for stop_id_info in stops_per_route[route_id][2:]:
-        
-                if stop_id_info[1] not in stops_dict:
-                    raise ValueError(f"Stop ID {stop_id_info[1]} not found in stops_dict")
-
-                stop = stops_dict[stop_id_info[1]]
-
-                rutgers_stop = RutgersStop(
-                    id = stop_id_info[1],
-                    route_id = route_id,
-                    name = stop.name,
-                    position_index = stop_id_info[0],
-                    position_coord = Coordinate(latitude=stop.latitude, longitude=stop.longitude)
+                rutgers_route = RutgersRoute(
+                    id = route_id,
+                    name = route.name,
+                    short_name = route.shortName,
+                    color = route.color
                 )
 
-                rutgers_route.stops_list.append(rutgers_stop)
-                rutgers_route.stops_dict[rutgers_stop.id] = rutgers_stop
+                rutgers_route.stops_list = []
+                rutgers_route.stops_dict = {}
 
-            rutgers_route.coords_list = [Coordinate(latitude=p['lat'], longitude=p['lng']) for p in route_points.get(route_id, [[]])[0]]
+                if route_id not in stops_per_route:
+                    print(f"No stops found for route ID: {route_id}")
+                    continue
+                
+                for stop_id_info in stops_per_route[route_id][2:]:
+            
+                    if stop_id_info[1] not in stops_dict:
+                        print(f"Stop ID {stop_id_info[1]} not found in stops_dict")
+                        continue
 
-            rutgers_routes_dict[route_id] = rutgers_route
-            rutgers_routes_list.append(rutgers_route)
+                    stop = stops_dict[stop_id_info[1]]
 
-        return rutgers_routes_dict if as_dict else rutgers_routes_list
+                    rutgers_stop = RutgersStop(
+                        id = stop_id_info[1],
+                        route_id = route_id,
+                        name = stop.name,
+                        position_index = stop_id_info[0],
+                        position_coord = Coordinate(latitude=stop.latitude, longitude=stop.longitude)
+                    )
+
+                    rutgers_route.stops_list.append(rutgers_stop)
+                    rutgers_route.stops_dict[rutgers_stop.id] = rutgers_stop
+
+                rutgers_route.coords_list = [Coordinate(latitude=p['lat'], longitude=p['lng']) for p in route_points.get(route_id, [[]])[0]]
+
+                rutgers_routes_dict[route_id] = rutgers_route
+                rutgers_routes_list.append(rutgers_route)
+
+            return rutgers_routes_dict if as_dict else rutgers_routes_list
+        except Exception as e:
+            print(f"Failed to get Rutgers routes: {str(e)}")
+            return {} if as_dict else []
     
     def get_buses(self) -> list[RutgersBus]:
         """
@@ -371,22 +382,26 @@ class RutgersPassioGOClient():
         Returns:
             list[RutgersBus]: List of active buses.
         """
-        buses = self.passiogo_client.get_buses()
-        return [
-            RutgersBus(
-                id = str(bus.busId),
-                route_id = bus.routeId,
-                route_block_id = bus.routeBlockId,
-                name = bus.bus,
-                pax_load = bus.paxLoad,
-                total_capacity = bus.totalCap,
-                is_out_of_service = bus.outOfService,
-                is_outdated = bus.outdated,
-                heading_in_degrees = bus.calculatedCourse,
-                speed_in_mph = bus.speed,
-                position_coord = Coordinate(latitude=bus.latitude, longitude=bus.longitude)
-            ) for bus in buses if bus.routeId not in self.excluded_route_ids
-        ]
+        try:
+            buses = self.passiogo_client.get_buses()
+            return [
+                RutgersBus(
+                    id = str(bus.busId),
+                    route_id = bus.routeId,
+                    route_block_id = bus.routeBlockId,
+                    name = bus.bus,
+                    pax_load = bus.paxLoad,
+                    total_capacity = bus.totalCap,
+                    is_out_of_service = bus.outOfService,
+                    is_outdated = bus.outdated,
+                    heading_in_degrees = bus.calculatedCourse,
+                    speed_in_mph = bus.speed,
+                    position_coord = Coordinate(latitude=bus.latitude, longitude=bus.longitude)
+                ) for bus in buses if bus.routeId not in self.excluded_route_ids
+            ]
+        except Exception as e:
+            print(f"Failed to get Rutgers buses: {str(e)}")
+            return []
     
     def get_etas_for_stop(self, stop : RutgersStop):
         """
@@ -398,72 +413,79 @@ class RutgersPassioGOClient():
         Returns:
             list[RutgersBus]: List of buses with ETA information.
         """
-        etas = self.passiogo_client.get_eta([stop.id], stop.route_id, stop.position_index, as_dict=False)
-        rutgers_buses = []
-        for eta in etas:
-            if eta.eta == 'no vehicles':
-                continue
-           
-            pax_load = None
-            if eta.paxLoadS:
-                try:
-                    pax_load = int(eta.paxLoadS.rstrip('%'))
-                except ValueError:
-                    pax_load = None
-          
-            position_coord = None
-            if eta.busLatLng and len(eta.busLatLng) == 2:
-                position_coord = Coordinate(latitude=float(eta.busLatLng[0]), longitude=float(eta.busLatLng[1]))
-            
-            eta_in_minutes = None
-            if eta.etaR:
-                try:
-                    eta_in_minutes = int(eta.etaR)
-                except (ValueError, TypeError):
-                    eta_in_minutes = None
-   
-            rutgers_eta = RutgersETA(
-                eta_description=eta.eta,
-                eta_in_minutes=eta_in_minutes,
-                eta_in_seconds=eta.secondsSpent,
-                updated_seconds_ago=eta.updatedSecAgo
-            )
+        try:
+            etas = self.passiogo_client.get_eta([stop.id], stop.route_id, stop.position_index, as_dict=False)
+            rutgers_buses = []
+            for eta in etas:
+                if eta.eta == 'no vehicles':
+                    continue
+               
+                pax_load = None
+                if eta.paxLoadS:
+                    try:
+                        pax_load = int(eta.paxLoadS.rstrip('%'))
+                    except ValueError:
+                        pax_load = None
+              
+                position_coord = None
+                if eta.busLatLng and len(eta.busLatLng) == 2:
+                    position_coord = Coordinate(latitude=float(eta.busLatLng[0]), longitude=float(eta.busLatLng[1]))
+                
+                eta_in_minutes = None
+                if eta.etaR:
+                    try:
+                        eta_in_minutes = int(eta.etaR)
+                    except (ValueError, TypeError):
+                        eta_in_minutes = None
+       
+                rutgers_eta = RutgersETA(
+                    eta_description=eta.eta,
+                    eta_in_minutes=eta_in_minutes,
+                    eta_in_seconds=eta.secondsSpent,
+                    updated_seconds_ago=eta.updatedSecAgo
+                )
 
-            bus_id = eta.solidEta.busId if eta.solidEta and eta.solidEta.busId else eta.busId
-            route_id = eta.solidEta.routeId if eta.solidEta and eta.solidEta.routeId else eta.routeId
-            rutgers_bus = RutgersBus(
-                id=str(bus_id) if bus_id else None,
-                route_id=route_id,
-                route_block_id=eta.routeBlockId,
-                name=eta.busName,
-                pax_load=pax_load,
-                total_capacity=None,
-                is_out_of_service=bool(eta.outOfService) if eta.outOfService is not None else None,
-                is_outdated=bool(eta.outdated) if eta.outdated is not None else None,
-                heading_in_degrees=None,
-                speed_in_mph=eta.speed,
-                position_coord=position_coord,
-                eta=rutgers_eta
-            )
-            rutgers_buses.append(rutgers_bus)
-        return rutgers_buses
+                bus_id = eta.solidEta.busId if eta.solidEta and eta.solidEta.busId else eta.busId
+                route_id = eta.solidEta.routeId if eta.solidEta and eta.solidEta.routeId else eta.routeId
+                rutgers_bus = RutgersBus(
+                    id=str(bus_id) if bus_id else None,
+                    route_id=route_id,
+                    route_block_id=eta.routeBlockId,
+                    name=eta.busName,
+                    pax_load=pax_load,
+                    total_capacity=None,
+                    is_out_of_service=bool(eta.outOfService) if eta.outOfService is not None else None,
+                    is_outdated=bool(eta.outdated) if eta.outdated is not None else None,
+                    heading_in_degrees=None,
+                    speed_in_mph=eta.speed,
+                    position_coord=position_coord,
+                    eta=rutgers_eta
+                )
+                rutgers_buses.append(rutgers_bus)
+            return rutgers_buses
+        except Exception as e:
+            print(f"Failed to get ETAs for stop {stop.id}: {str(e)}")
+            return []
 
     
 if __name__ == "__main__":
     # Example usage: Fetch routes with stops and ETAs, output as JSON
-    rutgers_client = RutgersPassioGOClient()
-    routes = rutgers_client.get_routes(as_dict=False)
-    data = []
-    for route in routes:
-        route_dict = route.to_dict()
-        stops_data = []
-        for stop in route.stops_list:
-            stop_dict = stop.to_dict()
-            buses = rutgers_client.get_etas_for_stop(stop)
-            stop_dict['etas'] = [bus.to_dict() for bus in buses]
-            stops_data.append(stop_dict)
-        route_dict['stops_list'] = stops_data
-        data.append(route_dict)
-    print(json.dumps(data, indent=4))
+    try:
+        rutgers_client = RutgersPassioGOClient()
+        routes = rutgers_client.get_routes(as_dict=False)
+        data = []
+        for route in routes:
+            route_dict = route.to_dict()
+            stops_data = []
+            for stop in route.stops_list:
+                stop_dict = stop.to_dict()
+                buses = rutgers_client.get_etas_for_stop(stop)
+                stop_dict['etas'] = [bus.to_dict() for bus in buses]
+                stops_data.append(stop_dict)
+            route_dict['stops_list'] = stops_data
+            data.append(route_dict)
+        print(json.dumps(data, indent=4))
+    except Exception as e:
+        print(f"Error in main: {str(e)}")
 
     
